@@ -185,7 +185,7 @@ button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit
       <div class="foot">지금 주문 들어오면 못 나감</div>
     </button>
     <button class="card c-low" data-f="low">
-      <div class="lbl">2박스 미만</div><div class="num" id="nLow">0</div>
+      <div class="lbl">4박스 미만</div><div class="num" id="nLow">0</div>
       <div class="foot">곧 품절 · 생산 대상</div>
     </button>
     <button class="card c-all on" data-f="all">
@@ -203,7 +203,7 @@ button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit
       <datalist id="nameHist"></datalist>
       <div class="seg">
         <button class="pOut on" id="segOut" data-s="out"><i></i>품절</button>
-        <button class="pLow" id="segLow" data-s="low"><i></i>2박스 미만</button>
+        <button class="pLow" id="segLow" data-s="low"><i></i>4박스 미만</button>
       </div>
       <input class="remain" id="inRemain" placeholder="남은 수량(선택)">
       <button class="addbtn" id="btnAdd">추가</button>
@@ -222,7 +222,7 @@ button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit
         <span style="font-size:12.5px;color:var(--ink-2)">위 목록을 다음 상태로 추가:</span>
         <div class="seg">
           <button class="pOut on" id="bOut" data-s="out"><i></i>품절</button>
-          <button class="pLow" id="bLow" data-s="low"><i></i>2박스 미만</button>
+          <button class="pLow" id="bLow" data-s="low"><i></i>4박스 미만</button>
         </div>
         <button class="addbtn" id="btnBulk">목록 추가</button>
       </div>
@@ -586,7 +586,7 @@ function render(){
   };
   let html="";
   if(filter!=="low") html+=sec(out,"out","품절 · 출고 불가");
-  if(filter!=="out") html+=sec(low,"low","2박스 미만");
+  if(filter!=="out") html+=sec(low,"low","4박스 미만");
   if(!html) html=`<div class="list"><div class="empty">검색/필터 조건에 맞는 항목이 없습니다.</div></div>`;
   board.innerHTML=html;
   board.querySelectorAll("[data-act]").forEach(b=>b.onclick=()=>itemAction(b.dataset.id,b.dataset.act));
@@ -631,13 +631,13 @@ function rowHtml(x,type){
   const remain=x.remain?`<span class="remain-tag">${esc(x.remain)}</span>`:"";
   const stTag = type==="out"
     ? `<span class="st-tag t-out">품절</span>`
-    : `<span class="st-tag t-low">2박스 미만</span>`;
+    : `<span class="st-tag t-low">4박스 미만</span>`;
   return `<div class="item i-${type}"><span class="bar-l"></span>
     ${stTag}
     <div class="main"><div class="nm">${esc(x.name)}</div><div class="meta">${fmt(x.ts)} 등록</div></div>
     ${remain}
     <div class="acts">
-      <button class="iact" data-id="${x.id}" data-act="toggle">${type==="out"?"→ 2박스":"→ 품절"}</button>
+      <button class="iact" data-id="${x.id}" data-act="toggle">${type==="out"?"→ 4박스":"→ 품절"}</button>
       <button class="iact done" data-id="${x.id}" data-act="done">생산됨</button>
       <button class="iact del" data-id="${x.id}" data-act="del">삭제</button>
     </div></div>`;
@@ -649,7 +649,7 @@ $("btnCopy").onclick=()=>{
   if(!ITEMS.length){ toast("복사할 항목이 없습니다"); return; }
   let t=`[재고 점검] ${lastCheck?fmt(lastCheck):fmt(Date.now())} 기준\n`;
   if(out.length) t+=`\n■ 품절 (${out.length})\n`+out.map(x=>`· ${x.name}`).join("\n")+"\n";
-  if(low.length) t+=`\n■ 2박스 미만 (${low.length})\n`+low.map(x=>`· ${x.name}${x.remain?` (${x.remain})`:""}`).join("\n")+"\n";
+  if(low.length) t+=`\n■ 4박스 미만 (${low.length})\n`+low.map(x=>`· ${x.name}${x.remain?` (${x.remain})`:""}`).join("\n")+"\n";
   copy(t.trim());
 };
 function copy(text){
@@ -666,7 +666,7 @@ function fb(text){
 /* ---- CSV ---- */
 $("btnCsv").onclick=()=>{
   if(!ITEMS.length){ toast("내보낼 항목이 없습니다"); return; }
-  const LBL={out:"품절",low:"2박스 미만"};
+  const LBL={out:"품절",low:"4박스 미만"};
   const head=["상태","품명","남은수량","등록시각"];
   const rows=ITEMS.slice().sort((a,b)=>(a.status===b.status?0:a.status==="out"?-1:1)||b.ts-a.ts)
     .map(x=>[LBL[x.status],x.name,x.remain,fmt(x.ts)]);
