@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mtou · 링크 통계</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="top"><a class="logo" href="/"><b>mtou</b> 단축 URL</a></header>
+<main>
+  <section class="hero"><h1>링크 통계</h1></section>
+  <div class="card" id="box"><div class="empty">불러오는 중…</div></div>
+</main>
+<footer>© mtou 단축 URL</footer>
+<script>
+const code = decodeURIComponent(location.pathname.split('/')[2] || '').replace(/\+$/, '');
+const fmt = (t) => t ? new Date(t).toLocaleString('ko-KR') : '-';
+fetch('/api/stats/' + encodeURIComponent(code)).then(async (r) => {
+  const d = await r.json(); const box = document.getElementById('box');
+  if (!r.ok) { box.innerHTML = '<div class="empty"></div>'; box.firstChild.textContent = d.error; return; }
+  box.innerHTML = `<a class="short" target="_blank" rel="noopener"></a><div class="orig"></div>
+    <div class="stat-grid">
+      <div class="stat"><div class="k">총 클릭</div><div class="v" id="c"></div></div>
+      <div class="stat"><div class="k">생성일</div><div class="v" style="font-size:15px" id="cr"></div></div>
+      <div class="stat" style="grid-column:1/-1"><div class="k">마지막 클릭</div><div class="v" style="font-size:15px" id="lc"></div></div>
+    </div>`;
+  const a = box.querySelector('.short'); a.href = d.shortUrl; a.textContent = d.shortUrl;
+  box.querySelector('.orig').textContent = d.url;
+  document.getElementById('c').textContent = d.clicks.toLocaleString();
+  document.getElementById('cr').textContent = fmt(d.createdAt);
+  document.getElementById('lc').textContent = fmt(d.lastClick);
+});
+</script>
+</body>
+</html>

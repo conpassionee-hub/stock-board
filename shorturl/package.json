@@ -1,0 +1,12 @@
+{
+  "name": "mtou-shorturl",
+  "version": "1.0.0",
+  "description": "mtou 단축 URL 서비스",
+  "main": "server.js",
+  "type": "commonjs",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js"
+  }
+}
