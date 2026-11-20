@@ -8,14 +8,17 @@ const { DatabaseSync } = require('node:sqlite');
 
 const PORT = Number(process.env.PORT) || 3000;
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
-const PREFIX = 'mtou'; // 단축 주소: BASE_URL/mtou/<code>
+// 단축 주소: BASE_URL/<code>  (mtou는 도메인에 넣는 것을 권장. 예: https://mtou.kr/Ab3x7)
+// 경로에 넣고 싶으면 PREFIX=mtou → BASE_URL/mtou/<code>
+const PREFIX = (process.env.PREFIX || '').replace(/^\/+|\/+$/g, '');
+const P = PREFIX ? `/${PREFIX}` : '';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
-const CODE_LEN = 6;
+const CODE_LEN = 5; // 57^5 ≈ 6억 개 조합
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'; // 헷갈리는 문자(0,O,1,l,I) 제외
 const ALIAS_RE = /^[A-Za-z0-9_-]{3,30}$/;
-const RESERVED = new Set(['api', 'stats', 'admin', 'static', 'index', 'favicon']);
+const RESERVED = new Set(['api', 'stats', 'admin', 'static', 'index', 'favicon', 'style', 'qrcode', '404']);
 const MAX_URL_LEN = 2048;
 
 // ---------- DB ----------
@@ -61,12 +64,12 @@ function normalizeUrl(input) {
   // 자기 자신의 단축 주소를 다시 줄이는 것 방지 (무한 리다이렉트 방지)
   try {
     const base = new URL(BASE_URL);
-    if (u.host === base.host && u.pathname.startsWith(`/${PREFIX}/`)) return null;
+    if (u.host === base.host) return null;
   } catch { /* ignore */ }
   return u.toString();
 }
 
-const shortUrl = (code) => `${BASE_URL}/${PREFIX}/${code}`;
+const shortUrl = (code) => `${BASE_URL}${P}/${code}`;
 
 function sendJson(res, status, obj) {
   const body = JSON.stringify(obj);
@@ -195,9 +198,9 @@ const server = http.createServer(async (req, res) => {
 
       let m;
       if ((m = pathname.match(/^\/api\/stats\/([A-Za-z0-9_-]{1,30})$/))) return handleStats(res, m[1]);
-      // /mtou/<code>+  → 통계 페이지,  /mtou/<code> → 리다이렉트
-      if ((m = pathname.match(new RegExp(`^/${PREFIX}/([A-Za-z0-9_-]{1,30})\\+$`)))) return serveStatic(res, 'stats.html');
-      if ((m = pathname.match(new RegExp(`^/${PREFIX}/([A-Za-z0-9_-]{1,30})/?$`)))) return handleRedirect(res, m[1]);
+      // /<code>+  → 통계 페이지,  /<code> → 리다이렉트
+      if ((m = pathname.match(new RegExp(`^${P}/([A-Za-z0-9_-]{1,30})\\+$`)))) return serveStatic(res, 'stats.html');
+      if ((m = pathname.match(new RegExp(`^${P}/([A-Za-z0-9_-]{1,30})/?$`)))) return handleRedirect(res, m[1]);
       if (/^\/[\w.-]+\.(css|js|svg|ico|png)$/.test(pathname)) return serveStatic(res, pathname.slice(1));
     }
     notFound(res);
@@ -208,6 +211,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`mtou 단축 URL 서버: ${BASE_URL}  (예: ${BASE_URL}/${PREFIX}/abc123)`));
+  server.listen(PORT, () => console.log(`mtou 단축 URL 서버: ${BASE_URL}  (예: ${shortUrl('Ab3x7')})`));
 }
 module.exports = { server, normalizeUrl };

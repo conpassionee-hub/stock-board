@@ -17,7 +17,7 @@
 </main>
 <footer>© mtou 단축 URL</footer>
 <script>
-const code = decodeURIComponent(location.pathname.split('/')[2] || '').replace(/\+$/, '');
+const code = decodeURIComponent(location.pathname.split('/').pop() || '').replace(/\+$/, '');
 const fmt = (t) => t ? new Date(t).toLocaleString('ko-KR') : '-';
 fetch('/api/stats/' + encodeURIComponent(code)).then(async (r) => {
   const d = await r.json(); const box = document.getElementById('box');

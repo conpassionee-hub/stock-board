@@ -20,7 +20,7 @@
 <main>
   <section class="hero">
     <h1>긴 주소를 짧고 깔끔하게</h1>
-    <p>URL을 붙여넣고 줄이기를 누르면 <b id="exPrefix">/mtou/</b> 단축 주소가 만들어집니다.</p>
+    <p>URL을 붙여넣고 줄이기를 누르면 <b id="exPrefix">mtou</b> 단축 주소가 만들어집니다.</p>
   </section>
 
   <form class="card" id="form" autocomplete="off">
@@ -31,7 +31,7 @@
     <details class="opts">
       <summary>원하는 주소로 만들기 (선택)</summary>
       <label class="alias">
-        <span id="aliasBase">/mtou/</span>
+        <span id="aliasBase">/</span>
         <input id="alias" type="text" placeholder="my-link" maxlength="30" aria-label="사용자 지정 별칭">
       </label>
     </details>
@@ -70,7 +70,7 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const RECENT_KEY = 'mtou_recent';
-let cfg = { baseUrl: location.origin, prefix: 'mtou' };
+let cfg = { baseUrl: location.origin, prefix: '' };
 
 const store = {
   get() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch { return []; } },
@@ -128,7 +128,7 @@ $('form').addEventListener('submit', async (e) => {
     if (!r.ok) throw new Error(d.error || '실패했습니다.');
     $('short').href = d.shortUrl; $('short').textContent = d.shortUrl;
     $('orig').textContent = d.url; $('orig').title = d.url;
-    $('stats').href = `/${cfg.prefix}/${d.code}+`;
+    $('stats').href = new URL(d.shortUrl).pathname + '+';
     renderQR(d.shortUrl);
     $('result').classList.add('show');
     const list = store.get().filter((x) => x.shortUrl !== d.shortUrl);
@@ -149,8 +149,8 @@ $('clear').onclick = () => { store.set([]); renderRecent(); };
 
 fetch('/api/config').then((r) => r.json()).then((c) => {
   cfg = c;
-  const base = c.baseUrl.replace(/^https?:\/\//, '') + '/' + c.prefix + '/';
-  $('aliasBase').textContent = base; $('exPrefix').textContent = '/' + c.prefix + '/';
+  const base = c.baseUrl.replace(/^https?:\/\//, '') + (c.prefix ? '/' + c.prefix : '') + '/';
+  $('aliasBase').textContent = base; $('exPrefix').textContent = base + 'Ab3x7';
   $('meta').textContent = `누적 ${c.n.toLocaleString()}개 · 클릭 ${c.c.toLocaleString()}회`;
 }).catch(() => {});
 renderRecent();
