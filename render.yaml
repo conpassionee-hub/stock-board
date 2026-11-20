@@ -1,0 +1,21 @@
+# Render Blueprint — mtou 단축 URL (shorturl/ 폴더)
+services:
+  - type: web
+    name: mtou
+    runtime: node
+    plan: free
+    rootDir: shorturl
+    buildCommand: "true"
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "22.13.0"
+      - key: BASE_URL
+        value: https://mtou.onrender.com
+      - key: TRUST_PROXY
+        value: "1"
+      - key: SUPABASE_URL
+        value: https://oildrpiazkctodysmxmg.supabase.co
+      - key: SUPABASE_KEY
+        sync: false   # Supabase anon(public) 키 — Render 대시보드에서 입력

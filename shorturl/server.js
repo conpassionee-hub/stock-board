@@ -1,10 +1,11 @@
 'use strict';
 // mtou 단축 URL 서버 — 외부 의존성 없이 Node.js 내장 모듈만 사용 (Node 22.13+)
+// 저장소: SUPABASE_URL/SUPABASE_KEY 가 있으면 Supabase, 없으면 로컬 SQLite (store.js)
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { DatabaseSync } = require('node:sqlite');
+const createStore = require('./store');
 
 const PORT = Number(process.env.PORT) || 3000;
 const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/+$/, '');
@@ -22,27 +23,11 @@ const RESERVED = new Set(['api', 'stats', 'admin', 'static', 'index', 'favicon',
 const MAX_URL_LEN = 2048;
 
 // ---------- DB ----------
-fs.mkdirSync(DATA_DIR, { recursive: true });
-const db = new DatabaseSync(path.join(DATA_DIR, 'links.db'));
-db.exec(`
-  PRAGMA journal_mode = WAL;
-  CREATE TABLE IF NOT EXISTS links (
-    code        TEXT PRIMARY KEY,
-    url         TEXT NOT NULL,
-    created_at  INTEGER NOT NULL,
-    clicks      INTEGER NOT NULL DEFAULT 0,
-    last_click  INTEGER,
-    is_custom   INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE INDEX IF NOT EXISTS idx_links_url ON links(url);
-`);
-const q = {
-  get: db.prepare('SELECT * FROM links WHERE code = ?'),
-  findAuto: db.prepare('SELECT code FROM links WHERE url = ? AND is_custom = 0 LIMIT 1'),
-  insert: db.prepare('INSERT INTO links (code, url, created_at, is_custom) VALUES (?, ?, ?, ?)'),
-  hit: db.prepare('UPDATE links SET clicks = clicks + 1, last_click = ? WHERE code = ?'),
-  total: db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(clicks),0) AS c FROM links'),
-};
+const store = createStore({
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseKey: process.env.SUPABASE_KEY,
+  dataDir: DATA_DIR,
+});
 
 // ---------- helpers ----------
 function randomCode(len = CODE_LEN) {
@@ -133,7 +118,8 @@ function notFound(res) {
 
 // ---------- handlers ----------
 async function handleShorten(req, res) {
-  const ip = req.socket.remoteAddress || '';
+  // Render 등 프록시 뒤에서는 X-Forwarded-For 의 첫 번째 값이 실제 IP
+  const ip = (process.env.TRUST_PROXY ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : '') || req.socket.remoteAddress || '';
   if (rateLimited(ip)) return sendJson(res, 429, { error: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.' });
 
   let data;
@@ -147,41 +133,29 @@ async function handleShorten(req, res) {
   if (alias) {
     if (!ALIAS_RE.test(alias)) return sendJson(res, 400, { error: '별칭은 영문·숫자·-·_ 3~30자만 가능합니다.' });
     if (RESERVED.has(alias.toLowerCase())) return sendJson(res, 400, { error: '사용할 수 없는 별칭입니다.' });
-    if (q.get.get(alias)) return sendJson(res, 409, { error: '이미 사용 중인 별칭입니다.' });
-    q.insert.run(alias, url, Date.now(), 1);
+    const r = await store.create(alias, url, true);
+    if (r.status === 'taken') return sendJson(res, 409, { error: '이미 사용 중인 별칭입니다.' });
     return sendJson(res, 201, { code: alias, shortUrl: shortUrl(alias), url });
   }
 
-  // 같은 URL은 기존 자동 코드를 재사용
-  const existing = q.findAuto.get(url);
-  if (existing) return sendJson(res, 200, { code: existing.code, shortUrl: shortUrl(existing.code), url });
-
+  // 같은 URL은 기존 자동 코드를 재사용 (store.create 가 처리)
   for (let i = 0; i < 8; i++) {
-    const code = randomCode(i < 5 ? CODE_LEN : CODE_LEN + 1);
-    try {
-      q.insert.run(code, url, Date.now(), 0);
-      return sendJson(res, 201, { code, shortUrl: shortUrl(code), url });
-    } catch (e) {
-      if (!String(e.message).includes('UNIQUE')) throw e;
-    }
+    const r = await store.create(randomCode(i < 5 ? CODE_LEN : CODE_LEN + 1), url, false);
+    if (r.status !== 'taken') return sendJson(res, r.status === 'created' ? 201 : 200, { code: r.code, shortUrl: shortUrl(r.code), url });
   }
   return sendJson(res, 500, { error: '코드 생성에 실패했습니다. 다시 시도해 주세요.' });
 }
 
-function handleStats(res, code) {
-  const row = q.get.get(code);
+async function handleStats(res, code) {
+  const row = await store.get(code);
   if (!row) return sendJson(res, 404, { error: '존재하지 않는 단축 주소입니다.' });
-  sendJson(res, 200, {
-    code: row.code, shortUrl: shortUrl(row.code), url: row.url,
-    clicks: row.clicks, createdAt: row.created_at, lastClick: row.last_click,
-  });
+  sendJson(res, 200, { ...row, shortUrl: shortUrl(row.code) });
 }
 
-function handleRedirect(res, code) {
-  const row = q.get.get(code);
-  if (!row) return notFound(res);
-  q.hit.run(Date.now(), code);
-  res.writeHead(302, { Location: row.url, 'Cache-Control': 'no-store', 'Referrer-Policy': 'unsafe-url' });
+async function handleRedirect(res, code) {
+  const url = await store.hit(code);
+  if (!url) return notFound(res);
+  res.writeHead(302, { Location: url, 'Cache-Control': 'no-store', 'Referrer-Policy': 'unsafe-url' });
   res.end();
 }
 
@@ -194,13 +168,14 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' || req.method === 'HEAD') {
       if (pathname === '/') return serveStatic(res, 'index.html');
-      if (pathname === '/api/config') return sendJson(res, 200, { baseUrl: BASE_URL, prefix: PREFIX, ...q.total.get() });
+      if (pathname === '/healthz') return sendJson(res, 200, { ok: true, store: store.kind });
+      if (pathname === '/api/config') return sendJson(res, 200, { baseUrl: BASE_URL, prefix: PREFIX, ...(await store.totals()) });
 
       let m;
-      if ((m = pathname.match(/^\/api\/stats\/([A-Za-z0-9_-]{1,30})$/))) return handleStats(res, m[1]);
+      if ((m = pathname.match(/^\/api\/stats\/([A-Za-z0-9_-]{1,30})$/))) return await handleStats(res, m[1]);
       // /<code>+  → 통계 페이지,  /<code> → 리다이렉트
       if ((m = pathname.match(new RegExp(`^${P}/([A-Za-z0-9_-]{1,30})\\+$`)))) return serveStatic(res, 'stats.html');
-      if ((m = pathname.match(new RegExp(`^${P}/([A-Za-z0-9_-]{1,30})/?$`)))) return handleRedirect(res, m[1]);
+      if ((m = pathname.match(new RegExp(`^${P}/([A-Za-z0-9_-]{1,30})/?$`)))) return await handleRedirect(res, m[1]);
       if (/^\/[\w.-]+\.(css|js|svg|ico|png)$/.test(pathname)) return serveStatic(res, pathname.slice(1));
     }
     notFound(res);
@@ -211,6 +186,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 if (require.main === module) {
-  server.listen(PORT, () => console.log(`mtou 단축 URL 서버: ${BASE_URL}  (예: ${shortUrl('Ab3x7')})`));
+  server.listen(PORT, () => console.log(`mtou 단축 URL 서버 [${store.kind}]: ${BASE_URL}  (예: ${shortUrl('Ab3x7')})`));
 }
 module.exports = { server, normalizeUrl };
